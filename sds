@@ -171,8 +171,8 @@ html,body{height:100%;font-family:var(--font);background:var(--bg-app);color:var
 .tchk:hover{border-color:var(--grn);}
 .ttask.done .tchk{background:var(--grn);border-color:var(--grn);}
 .ttask.done .tchk::after{content:'✓';font-size:9px;color:white;font-weight:700;}
-.ttext{flex:1;word-break:break-word;line-height:1.4;cursor:pointer;border-radius:4px;transition:background 0.1s;}
-.ttext:hover{background:var(--bg3); color:var(--acc);}
+.ttext{flex:1;word-break:break-word;line-height:1.4;}
+
 .tremove{font-size:12px;color:var(--t4);opacity:0;padding:0 4px;cursor:pointer;flex-shrink:0;line-height:1;margin-top:2px;}
 .ttask:hover .tremove{opacity:1;}
 .tremove:hover{color:var(--red);}
@@ -299,7 +299,11 @@ html,body{height:100%;font-family:var(--font);background:var(--bg-app);color:var
 
   <div class="view" id="view-ay">
     <div class="stats-row">
-      <div class="stat"><span class="slbl" style="color:var(--t2)">Organizado por Ayudador. Hacé clic en el texto para cambiarlo.</span></div>
+      <div class="stat"><span class="sn" id="ast">0</span><span class="slbl">tareas</span></div>
+      <div class="stat"><span class="sn d" id="asd">0</span><span class="slbl">hechas</span></div>
+      <div class="stat"><span class="sn p" id="asp">0</span><span class="slbl">pendientes</span></div>
+      <div class="pbar"><div class="pfill" id="apf"></div></div>
+      <button class="clear-btn" onclick="clearDone()">Limpiar hechas</button>
     </div>
     <div class="today-wrap">
       <div class="today-left">
@@ -318,6 +322,14 @@ html,body{height:100%;font-family:var(--font);background:var(--bg-app);color:var
       <div class="field"><label class="flbl">Modelo</label><select class="fsel" id="cfg-m"><option value="gpt-4o-mini">gpt-4o-mini</option><option value="gpt-4o">gpt-4o</option></select></div>
       <div class="field"><label class="flbl">Google Sheets URL (Sync Bot)</label><input class="finp" id="cfg-sheet" placeholder="https://docs.google.com/spreadsheets/d/e/2PACX.../pub?output=csv"/><span class="fnote">Publicá tu hoja como CSV y pegá la URL acá. El botón "Sync Bot" trae las tareas del bot de Telegram.</span></div>
       <div class="field"><label class="flbl">Telegram</label><div class="tg-box">Conectá un bot con <code>@BotFather</code> → <code>/newbot</code>, luego n8n/Make como webhook.</div></div>
+      <div class="field"><label class="flbl">Ayudadores</label>
+        <div id="cfg-helpers-list" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="finp" id="cfg-new-helper" placeholder="Nuevo ayudador..." style="flex:1"/>
+          <button class="btn-g" onclick="addHelper()">Agregar</button>
+        </div>
+        <span class="fnote">Al borrar un ayudador, sus tareas pasan a "Sin ayudador".</span>
+      </div>
       <div class="field"><label class="flbl">Datos</label>
         <div style="display:flex;gap:8px">
           <button class="btn-g" onclick="expJSON()">↓ Exportar Base</button>
@@ -359,7 +371,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg-app);color:var
 
 <div class="overlay" id="m-help">
   <div class="modal" style="width:320px">
-    <div class="mhead"><span class="mtitle">Asignar Ayudador</span><button class="mclose" onclick="cm('m-help')">✕</button></div>
+    <div class="mhead"><span class="mtitle" id="help-title">Asignar Ayudador</span><button class="mclose" onclick="cm('m-help')">✕</button></div>
     <div class="mbody" style="display:flex;flex-wrap:wrap;gap:8px;" id="help-list">
        </div>
   </div>
@@ -369,7 +381,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg-app);color:var
 
 <script>
 const DEFAULT_CATS=['Admin','Admin Varios','Logística','Facturación','Equipos','Insumos','Pedidos Clientes','Pedidos GMO','Errores ST','Retiro Equipos','Ver con GMO','Chatbot','Otros'];
-const HH=[
+const DEFAULT_HELPERS=[
   {id:'tel',lb:'Tel / Mail / WSP',c:'#4f46e5'},
   {id:'seguir',lb:'Seguir',c:'#7c3aed'},
   {id:'logis',lb:'Logística',c:'#ea580c'},
@@ -389,7 +401,7 @@ const SEED=[
   {text:'Pres vs realidad - cash miercoles',cat:'Admin',h:'hacer'}
 ];
 
-let S={tasks:[],todayIds:[],doneIds:[],cats:[...DEFAULT_CATS],cfg:{key:'',model:'gpt-4o-mini',sheetUrl:''}};
+let S={tasks:[],todayIds:[],doneIds:[],cats:[...DEFAULT_CATS],helpers:[...DEFAULT_HELPERS],cfg:{key:'',model:'gpt-4o-mini',sheetUrl:''}};
 let dragId=null;
 let activeTaskId=null;
 
@@ -400,6 +412,10 @@ function load(){
     else{S.tasks=SEED.map((t,i)=>({...t,id:'t'+i+'_'+Date.now()}));S.cats=[...DEFAULT_CATS];save();}
     if(!S.cats.includes('Chatbot')){S.cats.splice(S.cats.length-1,0,'Chatbot');save();}
     if(!S.cfg.sheetUrl)S.cfg.sheetUrl='';
+    if(!Array.isArray(S.helpers)||!S.helpers.length)S.helpers=[...DEFAULT_HELPERS];
+    if(!S.helpers.find(h=>h.id==='sin'))S.helpers.push({id:'sin',lb:'Sin ayudador',c:'#9ca3af'});
+    const validIds=new Set(S.helpers.map(h=>h.id));
+    S.tasks.forEach(t=>{if(!validIds.has(t.h))t.h='sin';});
   }catch(e){}
 }
 function save(){localStorage.setItem('pv6',JSON.stringify(S));badges();}
@@ -415,7 +431,7 @@ function gv(v){
   document.querySelector('[data-view="'+v+'"]').classList.add('active');
   if(v==='backlog')rBl();if(v==='today')rTd();if(v==='ay')rAy();
 }
-function getH(id){return HH.find(x=>x.id===id)||HH[HH.length-1];}
+function getH(id){return S.helpers.find(x=>x.id===id)||S.helpers.find(x=>x.id==='sin')||{id:'sin',lb:'Sin ayudador',c:'#9ca3af'};}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
 // ═══════════ BACKLOG ═══════════
@@ -436,7 +452,7 @@ function rBl(){
         ${inT?'<span class="today-badge">hoy</span>':''}
         <div class="trow-acts">
           ${inT?`<button class="rbt add" title="Quitar de hoy" onclick="event.stopPropagation();togT('${t.id}')">−</button>`
-               :`<button class="rbt add" title="Agregar a hoy" onclick="event.stopPropagation();togT('${t.id}')">+</button>`}
+               :`<button class="rbt add" title="Agregar a hoy" onclick="event.stopPropagation();openSetHelper('${t.id}','add')">+</button>`}
           <button class="rbt del" title="Eliminar" onclick="event.stopPropagation();delT('${t.id}')">✕</button>
         </div></div>`;}).join('');
     card.innerHTML=`<div class="cat-head"><span class="cat-title" ondblclick="editCatName('${esc(cat)}')">${esc(cat)}</span>
@@ -489,7 +505,7 @@ function rTd(){
       return`<div class="ttask${d?' done':''}">
         <div class="tchk" onclick="event.stopPropagation();togDone('${t.id}')"></div>
         <span class="hdot" style="background:${h.c}"></span>
-        <span class="ttext" title="Click para cambiar ayudador" onclick="openSetHelper('${t.id}')">${esc(t.text)}</span>
+        <span class="ttext">${esc(t.text)}</span>
         <span class="tremove" onclick="event.stopPropagation();remT('${t.id}')">✕</span>
       </div>`;}).join('');
     card.innerHTML=`<div class="cat-head"><span class="cat-title" ondblclick="editCatName('${esc(cat)}')">${esc(cat)}</span><span class="cat-n">${doneC}/${ts.length}</span></div><div class="cat-body">${rows}</div>`;
@@ -501,10 +517,15 @@ function rTd(){
 // ═══════════ AYUDADORES (POR AYUDADOR) ═══════════
 function rAy(){
   const tts=S.todayIds.map(id=>S.tasks.find(t=>t.id===id)).filter(Boolean);
+  const tot=tts.length,dn=S.doneIds.filter(id=>S.todayIds.includes(id)).length,pn=tot-dn;
+  document.getElementById('ast').textContent=tot;
+  document.getElementById('asd').textContent=dn;
+  document.getElementById('asp').textContent=pn;
+  document.getElementById('apf').style.width=tot?(dn/tot*100)+'%':'0%';
   const grid=document.getElementById('ay-grid');grid.innerHTML='';
   const byH={};tts.forEach(t=>{if(!byH[t.h])byH[t.h]=[];byH[t.h].push(t);});
   let any=false;
-  HH.forEach(hObj=>{
+  S.helpers.forEach(hObj=>{
     const ts=byH[hObj.id];if(!ts||!ts.length)return;any=true;
     const card=document.createElement('div');card.className='cat-card';
     const doneC=ts.filter(t=>S.doneIds.includes(t.id)).length;
@@ -513,7 +534,7 @@ function rAy(){
       return`<div class="ttask${d?' done':''}">
         <div class="tchk" onclick="event.stopPropagation();togDone('${t.id}')"></div>
         <span class="hdot" style="background:${hObj.c}"></span>
-        <span class="ttext" title="Click para cambiar ayudador" onclick="openSetHelper('${t.id}')">${esc(t.text)} <span style="font-size:9px;color:var(--t4);font-weight:600">(${esc(t.cat)})</span></span>
+        <span class="ttext">${esc(t.text)} <span style="font-size:9px;color:var(--t4);font-weight:600">(${esc(t.cat)})</span></span>
         <span class="tremove" onclick="event.stopPropagation();remT('${t.id}')">✕</span>
       </div>`;}).join('');
     card.innerHTML=`<div class="cat-head"><span class="cat-title" style="color:${hObj.c}">${esc(hObj.lb)}</span><span class="cat-n">${doneC}/${ts.length}</span></div><div class="cat-body">${rows}</div>`;
@@ -523,31 +544,103 @@ function rAy(){
 }
 
 // ═══════════ ACTIONS ═══════════
-function togT(id){if(S.todayIds.includes(id))S.todayIds=S.todayIds.filter(x=>x!==id);else S.todayIds.push(id);save();rBl();rTd();rAy();}
+function togT(id){if(S.todayIds.includes(id))S.todayIds=S.todayIds.filter(x=>x!==id);save();rBl();rTd();rAy();}
 function remT(id){S.todayIds=S.todayIds.filter(x=>x!==id);save();rTd();rBl();rAy();}
 function togDone(id){if(S.doneIds.includes(id))S.doneIds=S.doneIds.filter(x=>x!==id);else S.doneIds.push(id);save();rTd();rAy();}
 function clearDone(){const d=S.doneIds.filter(id=>S.todayIds.includes(id));S.todayIds=S.todayIds.filter(id=>!d.includes(id));S.doneIds=S.doneIds.filter(id=>!d.includes(id));save();rTd();rBl();rAy();toast('Tareas limpiadas','ok');}
 function delT(id){S.tasks=S.tasks.filter(t=>t.id!==id);S.todayIds=S.todayIds.filter(x=>x!==id);S.doneIds=S.doneIds.filter(x=>x!==id);save();rBl();rTd();rAy();}
 
 // ═══════════ SET HELPER MODAL ═══════════
-function openSetHelper(id){
+function openSetHelper(id,mode='set'){
   activeTaskId = id;
   const t = S.tasks.find(x => x.id === id);
   if(!t) return;
-  document.getElementById('help-list').innerHTML = HH.map(h => 
-    `<button class="btn-g" style="flex:1 1 45%; padding:10px; font-size:11px; ${t.h===h.id?'border-color:var(--acc);color:var(--acc);background:var(--acc-l)':''}" onclick="setHelper('${h.id}')">
-      <span class="hdot" style="background:${h.c}; display:inline-block; margin-right:4px;"></span>${h.lb}
-    </button>`
-  ).join('');
+  document.getElementById('help-title').textContent = mode==='add' ? 'Agregar a hoy' : 'Asignar Ayudador';
+  const list=document.getElementById('help-list');
+  list.innerHTML='';
+  S.helpers.forEach(h=>{
+    const btn=document.createElement('button');
+    btn.className='btn-g';
+    btn.style.cssText=`flex:1 1 45%;padding:10px;font-size:11px;${t.h===h.id?'border-color:var(--acc);color:var(--acc);background:var(--acc-l);':''}`;
+    btn.onclick=()=>setHelper(h.id,mode);
+    const dot=document.createElement('span');
+    dot.className='hdot';
+    dot.style.cssText=`background:${h.c};display:inline-block;margin-right:4px;`;
+    btn.appendChild(dot);
+    btn.appendChild(document.createTextNode(h.lb));
+    list.appendChild(btn);
+  });
   document.getElementById('m-help').classList.add('open');
 }
-function setHelper(hid){
+function setHelper(hid,mode='set'){
   if(!activeTaskId) return;
   const t = S.tasks.find(x => x.id === activeTaskId);
-  if(t) t.h = hid;
+  if(t){
+    t.h = hid;
+    if(mode==='add' && !S.todayIds.includes(t.id))S.todayIds.push(t.id);
+  }
   save(); rBl(); rTd(); rAy();
   cm('m-help');
-  toast('Ayudador actualizado', 'ok');
+  toast(mode==='add'?'Tarea agregada a hoy':'Ayudador actualizado', 'ok');
+}
+
+function randColor(){return `hsl(${Math.floor(Math.random()*360)} 70% 45%)`;}
+function slugHelper(name){
+  let base=name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,18)||'h';
+  let id=base,i=2;
+  while(S.helpers.some(h=>h.id===id)){id=`${base}-${i}`;i++;}
+  return id;
+}
+function renderHelperConfig(){
+  const c=document.getElementById('cfg-helpers-list');if(!c)return;
+  c.innerHTML='';
+  S.helpers.forEach(h=>{
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;gap:8px;align-items:center';
+    const dot=document.createElement('span');
+    dot.className='hdot';
+    dot.style.cssText=`background:${h.c};width:10px;height:10px;margin-top:0`;
+    const inp=document.createElement('input');
+    inp.className='finp';
+    inp.value=h.lb;
+    inp.disabled=h.id==='sin';
+    inp.oninput=()=>renameHelper(h.id,inp.value);
+    row.appendChild(dot);
+    row.appendChild(inp);
+    if(h.id!=='sin'){
+      const del=document.createElement('button');
+      del.className='btn-g';
+      del.style.padding='8px 10px';
+      del.textContent='✕';
+      del.onclick=()=>removeHelper(h.id);
+      row.appendChild(del);
+    }
+    c.appendChild(row);
+  });
+}
+function addHelper(){
+  const inp=document.getElementById('cfg-new-helper');
+  const name=inp.value.trim();
+  if(!name){toast('Escribí un nombre de ayudador','err');return;}
+  const id=slugHelper(name);
+  S.helpers.push({id,lb:name,c:randColor()});
+  inp.value='';
+  save();renderHelperConfig();rBl();rTd();rAy();
+  toast('Ayudador agregado','ok');
+}
+function renameHelper(id,name){
+  const h=S.helpers.find(x=>x.id===id);if(!h)return;
+  h.lb=name.trim()||h.lb;
+  save();rBl();rAy();
+}
+function removeHelper(id){
+  if(id==='sin')return;
+  const h=S.helpers.find(x=>x.id===id);if(!h)return;
+  if(!confirm(`¿Borrar ayudador "${h.lb}"?`))return;
+  S.tasks.forEach(t=>{if(t.h===id)t.h='sin';});
+  S.helpers=S.helpers.filter(x=>x.id!==id);
+  save();renderHelperConfig();rBl();rTd();rAy();
+  toast('Ayudador eliminado','ok');
 }
 
 // ═══════════ CATEGORIES ═══════════
@@ -568,13 +661,13 @@ function delCat(cat){
 // ═══════════ ADD MODAL ═══════════
 function openAdd(pcat,ptxt='',toTd=false,ai=null){
   document.getElementById('at-c').innerHTML=S.cats.map(c=>`<option value="${c}" ${c===(ai?.cat||pcat)?'selected':''}>${c}</option>`).join('');
-  document.getElementById('at-h').innerHTML=HH.map(h=>`<option value="${h.id}" ${h.id===ai?.h?'selected':''}>${h.lb}</option>`).join('');
+  document.getElementById('at-h').innerHTML=S.helpers.map(h=>`<option value="${h.id}" ${h.id===ai?.h?'selected':''}>${h.lb}</option>`).join('');
   document.getElementById('at-t').value=ptxt;document.getElementById('at-td').checked=toTd;
   const sug=document.getElementById('aisug');
   if(ai){sug.classList.add('show');
     document.getElementById('aicats').innerHTML=[ai.cat,...S.cats.filter(c=>c!==ai.cat).slice(0,3)].map(c=>
       `<div class="aic${c===ai.cat?' sel':''}" onclick="pickCat('${esc(c)}',this)">${c}</div>`).join('');
-    document.getElementById('aihs').innerHTML=HH.filter(h=>h.id===ai.h||['tel','seguir','hacer','logis'].includes(h.id)).slice(0,5).map(h=>
+    document.getElementById('aihs').innerHTML=S.helpers.filter(h=>h.id===ai.h||h.id==='sin').slice(0,5).map(h=>
       `<div class="aic${h.id===ai.h?' sel':''}" onclick="pickHel('${h.id}',this)">${h.lb}</div>`).join('');
   }else sug.classList.remove('show');
   document.getElementById('madd').classList.add('open');
@@ -597,13 +690,13 @@ async function aiClassifyModal(){
   if(ai){document.getElementById('aisug').classList.add('show');
     document.getElementById('aicats').innerHTML=[ai.cat,...S.cats.filter(c=>c!==ai.cat).slice(0,3)].map(c=>
       `<div class="aic${c===ai.cat?' sel':''}" onclick="pickCat('${esc(c)}',this)">${c}</div>`).join('');
-    document.getElementById('aihs').innerHTML=HH.filter(h=>h.id===ai.h||['tel','seguir','hacer','logis'].includes(h.id)).slice(0,5).map(h=>
+    document.getElementById('aihs').innerHTML=S.helpers.filter(h=>h.id===ai.h||h.id==='sin').slice(0,5).map(h=>
       `<div class="aic${h.id===ai.h?' sel':''}" onclick="pickHel('${h.id}',this)">${h.lb}</div>`).join('');
     document.getElementById('at-c').value=ai.cat;document.getElementById('at-h').value=ai.h;}
 }
 async function doAI(txt){
   if(!S.cfg.key)return null;
-  const p=`Clasificá esta tarea para una empresa de servicios tecnológicos.\nCategorías: ${S.cats.join(', ')}\nAyudadores (id→nombre):\n${HH.map(h=>h.id+': '+h.lb).join('\n')}\nTarea: "${txt}"\nRespondé SOLO con JSON: {"cat":"...","h":"..."}\nUsá exactamente los nombres/IDs listados.`;
+  const p=`Clasificá esta tarea para una empresa de servicios tecnológicos.\nCategorías: ${S.cats.join(', ')}\nAyudadores (id→nombre):\n${S.helpers.map(h=>h.id+': '+h.lb).join('\n')}\nTarea: "${txt}"\nRespondé SOLO con JSON: {"cat":"...","h":"..."}\nUsá exactamente los nombres/IDs listados.`;
   try{const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+S.cfg.key},
     body:JSON.stringify({model:S.cfg.model||'gpt-4o-mini',messages:[{role:'user',content:p}],temperature:0.1,max_tokens:60})});
@@ -636,10 +729,9 @@ async function syncTelegram(){
       
       const cat=(cols[3]||'Chatbot').trim();
       const h=(cols[4]||'sin').trim();
-      
       const finalCat = S.cats.includes(cat) ? cat : 'Chatbot';
-      
-      S.tasks.push({id:'tg'+Date.now()+'_'+i,text,cat:finalCat,h});
+      const finalH = S.helpers.some(x=>x.id===h) ? h : 'sin';
+      S.tasks.push({id:'tg'+Date.now()+'_'+i,text,cat:finalCat,h:finalH});
       existingTexts.add(text.toLowerCase());
       added++;
     }
@@ -666,12 +758,12 @@ function parseCSVLine(line){
 }
 
 // ═══════════ UTILS ═══════════
-function openCfg(){document.getElementById('cfg-k').value=S.cfg.key||'';document.getElementById('cfg-m').value=S.cfg.model||'gpt-4o-mini';document.getElementById('cfg-sheet').value=S.cfg.sheetUrl||'';document.getElementById('mcfg').classList.add('open');}
+function openCfg(){document.getElementById('cfg-k').value=S.cfg.key||'';document.getElementById('cfg-m').value=S.cfg.model||'gpt-4o-mini';document.getElementById('cfg-sheet').value=S.cfg.sheetUrl||'';document.getElementById('cfg-new-helper').value='';renderHelperConfig();document.getElementById('mcfg').classList.add('open');}
 function saveCfg(){S.cfg.key=document.getElementById('cfg-k').value.trim();S.cfg.model=document.getElementById('cfg-m').value;S.cfg.sheetUrl=document.getElementById('cfg-sheet').value.trim();save();cm('mcfg');toast('Configuración guardada','ok');}
 function cm(id){document.getElementById(id).classList.remove('open');}
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 function expJSON(){const b=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='planificador_backup.json';a.click();toast('Backup descargado','ok');}
-function impJSON(e){const f=e.target.files[0];if(!f)return;const fr=new FileReader();fr.onload=ev=>{try{S={...S,...JSON.parse(ev.target.result)};if(!S.cats)S.cats=[...DEFAULT_CATS];save();rBl();rTd();rAy();toast('Backup restaurado','ok');}catch{toast('Error en el archivo','err');}};fr.readAsText(f);}
+function impJSON(e){const f=e.target.files[0];if(!f)return;const fr=new FileReader();fr.onload=ev=>{try{S={...S,...JSON.parse(ev.target.result)};if(!S.cats)S.cats=[...DEFAULT_CATS];if(!Array.isArray(S.helpers)||!S.helpers.length)S.helpers=[...DEFAULT_HELPERS];if(!S.helpers.find(h=>h.id==='sin'))S.helpers.push({id:'sin',lb:'Sin ayudador',c:'#9ca3af'});const valid=new Set(S.helpers.map(h=>h.id));S.tasks.forEach(t=>{if(!valid.has(t.h))t.h='sin';});save();rBl();rTd();rAy();toast('Backup restaurado','ok');}catch{toast('Error en el archivo','err');}};fr.readAsText(f);}
 function toast(msg,type=''){const c=document.getElementById('toasts');const t=document.createElement('div');t.className='tst '+(type==='ok'?'ok':type==='err'?'err':'');
 t.innerHTML=type==='ok'?'<span style="font-size:14px">✓</span> '+msg:type==='err'?'<span style="font-size:14px">✕</span> '+msg:'<span style="font-size:14px">↻</span> '+msg;
 c.appendChild(t);setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300);},2500);}
