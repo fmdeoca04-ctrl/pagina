@@ -556,11 +556,20 @@ function openSetHelper(id,mode='set'){
   const t = S.tasks.find(x => x.id === id);
   if(!t) return;
   document.getElementById('help-title').textContent = mode==='add' ? 'Agregar a hoy' : 'Asignar Ayudador';
-  document.getElementById('help-list').innerHTML = S.helpers.map(h => 
-    `<button class="btn-g" style="flex:1 1 45%; padding:10px; font-size:11px; ${t.h===h.id?'border-color:var(--acc);color:var(--acc);background:var(--acc-l)':''}" onclick="setHelper('${h.id}','${mode}')">
-      <span class="hdot" style="background:${h.c}; display:inline-block; margin-right:4px;"></span>${h.lb}
-    </button>`
-  ).join('');
+  const list=document.getElementById('help-list');
+  list.innerHTML='';
+  S.helpers.forEach(h=>{
+    const btn=document.createElement('button');
+    btn.className='btn-g';
+    btn.style.cssText=`flex:1 1 45%;padding:10px;font-size:11px;${t.h===h.id?'border-color:var(--acc);color:var(--acc);background:var(--acc-l);':''}`;
+    btn.onclick=()=>setHelper(h.id,mode);
+    const dot=document.createElement('span');
+    dot.className='hdot';
+    dot.style.cssText=`background:${h.c};display:inline-block;margin-right:4px;`;
+    btn.appendChild(dot);
+    btn.appendChild(document.createTextNode(h.lb));
+    list.appendChild(btn);
+  });
   document.getElementById('m-help').classList.add('open');
 }
 function setHelper(hid,mode='set'){
@@ -584,11 +593,30 @@ function slugHelper(name){
 }
 function renderHelperConfig(){
   const c=document.getElementById('cfg-helpers-list');if(!c)return;
-  c.innerHTML=S.helpers.map(h=>`<div style="display:flex;gap:8px;align-items:center">
-      <span class="hdot" style="background:${h.c};width:10px;height:10px;margin-top:0"></span>
-      <input class="finp" value="${esc(h.lb)}" oninput="renameHelper('${h.id}',this.value)" ${h.id==='sin'?'disabled':''} />
-      ${h.id==='sin'?'':`<button class="btn-g" onclick="removeHelper('${h.id}')" style="padding:8px 10px">✕</button>`}
-    </div>`).join('');
+  c.innerHTML='';
+  S.helpers.forEach(h=>{
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;gap:8px;align-items:center';
+    const dot=document.createElement('span');
+    dot.className='hdot';
+    dot.style.cssText=`background:${h.c};width:10px;height:10px;margin-top:0`;
+    const inp=document.createElement('input');
+    inp.className='finp';
+    inp.value=h.lb;
+    inp.disabled=h.id==='sin';
+    inp.oninput=()=>renameHelper(h.id,inp.value);
+    row.appendChild(dot);
+    row.appendChild(inp);
+    if(h.id!=='sin'){
+      const del=document.createElement('button');
+      del.className='btn-g';
+      del.style.padding='8px 10px';
+      del.textContent='✕';
+      del.onclick=()=>removeHelper(h.id);
+      row.appendChild(del);
+    }
+    c.appendChild(row);
+  });
 }
 function addHelper(){
   const inp=document.getElementById('cfg-new-helper');
